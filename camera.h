@@ -3,6 +3,7 @@
 
 #include "hittable.h"
 #include "rtweekend.h"
+#include "stb_image_write.h"
 
 class camera {
   public:
@@ -13,7 +14,9 @@ class camera {
     void render(const hittable& world) {
         initialize();
 
-        std::cout << "P3\n" << image_width << " " << image_height << "\n255\n";
+        uint32_t* image_data = new uint32_t[image_width * image_height];
+
+        std::clog << "Processing image...\n";
 
         for (int j = 0; j < image_height; j++) {
             std::clog << "\rScanlines remaining: " << (image_height - j) << " " << std::flush;
@@ -23,11 +26,15 @@ class camera {
                     ray r = get_ray(i, j);
                     pixel_color += ray_color(r, world);
                 }
-                write_color(std::cout, pixel_samples_scale * pixel_color);
+                image_data[j*image_width+i] = get_color(pixel_samples_scale * pixel_color);
             }
         }
 
-        std::clog << "\rDone.                 \n";
+        std::clog << "\nWriting file...\n";
+        stbi_write_png("image.png", image_width, image_height, 4, image_data, image_width*4);
+        delete [] image_data;
+
+        std::clog << "Done\n";
     }
 
   private:
