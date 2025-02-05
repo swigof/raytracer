@@ -1,6 +1,8 @@
 #ifndef CAMERA_H
 #define CAMERA_H
 
+#include <thread>
+#include <vector>
 #include "hittable.h"
 #include "rtweekend.h"
 #include "stb_image_write.h"
@@ -13,32 +15,48 @@ class camera {
     int    samples_per_pixel = 10;   // Count of random samples for each pixel
     int    max_depth         = 10;   // Maximum number of ray bounces into scene
 
-    double vfov     = 90;  // Vertical view angle (field of view)
+    double vfov     = 90;              // Vertical view angle (field of view)
     point3 lookfrom = point3(0,0,0);   // Point camera is looking from
     point3 lookat   = point3(0,0,-1);  // Point camera is looking at
     vec3   vup      = vec3(0,1,0);     // Camera-relative "up" direction
 
     double defocus_angle = 0;  // Variation angle of rays through each pixel
-    double focus_dist = 10;    // Distance from camera lookfrom point to plane of perfect focus
+    double focus_dist    = 10; // Distance from camera lookfrom point to plane of perfect focus
 
-    void render(const hittable& world) {
+    int max_threads = 8; // Maximum number of rendering threads
+
+    void render(shared_ptr<const hittable> world) {
         initialize();
 
         uint32_t* image_data = new uint32_t[image_width * image_height];
 
-        std::clog << "Processing image...\n";
+        int thread_count = static_cast<int>(std::thread::hardware_concurrency());
+        thread_count = thread_count < 1 ? 1 : thread_count;
+        thread_count = thread_count > max_threads ? max_threads : thread_count;
 
-        for (int j = 0; j < image_height; j++) {
-            std::clog << "\rScanlines remaining: " << (image_height - j) << " " << std::flush;
-            for (int i = 0; i < image_width; i++) {
-                color pixel_color(0,0,0);
-                for (int sample = 0; sample < samples_per_pixel; sample++) {
-                    ray r = get_ray(i, j);
-                    pixel_color += ray_color(r, max_depth, world);
-                }
-                image_data[j*image_width+i] = get_color(pixel_samples_scale * pixel_color);
-            }
+        std::clog << "Processing image with " << thread_count << " threads\n";
+
+        // Process a number of scanlines with each thread
+        const auto scanlines_per_thread = image_height / thread_count;
+        const auto scanline_remainder = image_height % thread_count;
+        std::vector<std::thread> threads;
+        for (int i = 0; i < thread_count - 1; i++) {
+            auto start_line = i * scanlines_per_thread;
+            threads.push_back(std::thread(
+                &camera::render_portion, this,
+                    world, scanlines_per_thread, start_line, image_data
+            ));
         }
+        auto final_thread_start_line = (thread_count - 1) * scanlines_per_thread;
+        auto final_thread_line_count = scanlines_per_thread + scanline_remainder;
+        threads.push_back(std::thread(
+            &camera::render_portion, this,
+                world, final_thread_line_count, final_thread_start_line, image_data
+            ));
+
+        threads.push_back(std::thread(&camera::print_progress, this));
+
+        for (auto& thread : threads) thread.join();
 
         std::clog << "\nWriting file...\n";
         stbi_write_png("image.png", image_width, image_height, 4, image_data, image_width*4);
@@ -57,10 +75,13 @@ class camera {
     vec3   u, v, w;              // Camera frame basis vectors
     vec3   defocus_disk_u;       // Defocus disk horizontal radius
     vec3   defocus_disk_v;       // Defocus disk vertical radius
+    std::atomic_int lines_done;  // Count of lines which have finished rendering
 
     void initialize() {
         image_height = int(image_width / aspect_ratio);
         image_height = (image_height < 1) ? 1 : image_height;
+
+        lines_done = 0;
 
         pixel_samples_scale = 1.0 / samples_per_pixel;
 
@@ -95,6 +116,21 @@ class camera {
         defocus_disk_v = v * defocus_radius;
     }
 
+    void render_portion(shared_ptr<const hittable> world, int line_count,
+                        int start_line, uint32_t* image_data) {
+        for (int j = start_line; j < start_line + line_count; j++) {
+            for (int i = 0; i < image_width; i++) {
+                color pixel_color(0,0,0);
+                for (int sample = 0; sample < samples_per_pixel; sample++) {
+                    ray r = get_ray(i, j);
+                    pixel_color += ray_color(r, max_depth, world);
+                }
+                image_data[j*image_width+i] = get_color(pixel_samples_scale * pixel_color);
+            }
+            lines_done.fetch_add(1);
+        }
+    }
+
     ray get_ray(int i, int j) const {
         // Construct a camera ray originating from the defocus disk and directed at a randomly
         // sampled point around the pixel location i, j.
@@ -121,13 +157,13 @@ class camera {
         return center + (p[0] * defocus_disk_u) + (p[1] * defocus_disk_v);
     }
 
-    color ray_color(const ray& r, int depth, const hittable& world) const {
+    color ray_color(const ray& r, int depth, shared_ptr<const hittable> world) const {
         // If we've exceeded the ray bounce limit, no more light is gathered.
         if (depth <= 0)
             return color(0,0,0);
 
         hit_record rec;
-        if (world.hit(r, interval(0.001, infinity), rec)) {
+        if (world->hit(r, interval(0.001, infinity), rec)) {
             ray scattered;
             color attenuation;
             if (rec.mat->scatter(r, rec, attenuation, scattered))
@@ -139,6 +175,15 @@ class camera {
         vec3 unit_direction = unit_vector(r.direction());
         auto a = 0.5*(unit_direction.y() + 1.0); // [-1, 1] -> [0, 1]
         return (1.0-a)*color(1.0, 1.0, 1.0) + a*color(0.5, 0.7, 1.0); // color gradient lerp
+    }
+
+    void print_progress() const {
+        while (lines_done < image_height) {
+            int current_lines_done = lines_done;
+            int percent_complete = current_lines_done / static_cast<double>(image_height) * 100;
+            std::clog << "\r" << percent_complete << "%" << std::flush;
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+        }
     }
 };
 
