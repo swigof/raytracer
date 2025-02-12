@@ -4,3 +4,7 @@ project(raytracer)
 set(CMAKE_CXX_STANDARD 17)
 
 add_executable(raytracer main.cpp)
+
+if(MSVC)
+    add_definitions(-D_CRT_SECURE_NO_WARNINGS)
+endif()
