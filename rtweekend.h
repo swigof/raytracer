@@ -7,7 +7,7 @@
 #include <memory>
 #include <random>
 
-#include "xoshiro.hpp"
+#include "external/xoshiro.hpp"
 
 // C++ Std Usings
 

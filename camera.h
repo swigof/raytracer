@@ -5,7 +5,7 @@
 #include <vector>
 #include "hittable.h"
 #include "rtweekend.h"
-#include "stb_image_write.h"
+#include "external/stb_image_write.h"
 #include "material.h"
 
 class camera {
