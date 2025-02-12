@@ -27,6 +27,7 @@ class vec3 {
         e[0] *= t;
         e[1] *= t;
         e[2] *= t;
+        return *this;
     }
 
     vec3& operator/=(double t) {

@@ -123,7 +123,7 @@ void earth() {
 
     cam.max_threads = 6;
 
-    cam.render(make_shared<bvh_node>(hittable_list(globe)));
+    cam.render(globe);
 }
 
 int main() {
