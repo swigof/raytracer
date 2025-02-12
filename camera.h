@@ -180,8 +180,9 @@ class camera {
     }
 
     void print_progress() const {
-        while (lines_done < image_height) {
-            int current_lines_done = lines_done;
+        int current_lines_done = 0;
+        while (current_lines_done < image_height) {
+            current_lines_done = lines_done.load();
             int percent_complete = current_lines_done / static_cast<double>(image_height) * 100;
             std::clog << "\r" << percent_complete << "%" << std::flush;
             std::this_thread::sleep_for(std::chrono::seconds(1));

@@ -58,7 +58,7 @@ class sphere : public hittable {
   private:
     ray center;
     double radius;
-    shared_ptr<material> mat;
+    shared_ptr<const material> mat;
     aabb bbox;
 };
 
