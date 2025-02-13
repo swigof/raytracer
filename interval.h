@@ -19,7 +19,7 @@ class interval {
         return max - min;
     }
 
-    double contains(double x) const {
+    bool contains(double x) const {
         return min <= x && x <= max;
     }
 
