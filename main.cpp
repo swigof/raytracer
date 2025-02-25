@@ -74,7 +74,7 @@ void bouncing_spheres() {
 
     cam.max_threads = 6;
 
-    cam.render(world_tree);
+    cam.render(world_tree, make_shared<hittable_list>());
 }
 
 void checkered_spheres() {
@@ -105,7 +105,7 @@ void checkered_spheres() {
 
     cam.max_threads = 6;
 
-    cam.render(world_tree);
+    cam.render(world_tree, make_shared<hittable_list>());
 }
 
 void earth() {
@@ -131,7 +131,7 @@ void earth() {
 
     cam.max_threads = 6;
 
-    cam.render(globe);
+    cam.render(globe, make_shared<hittable_list>());
 }
 
 void perlin_spheres() {
@@ -159,7 +159,7 @@ void perlin_spheres() {
 
     cam.max_threads = 6;
 
-    cam.render(make_shared<bvh_node>(world));
+    cam.render(make_shared<bvh_node>(world), make_shared<hittable_list>());
 }
 
 void quads() {
@@ -197,7 +197,7 @@ void quads() {
 
     cam.max_threads = 6;
 
-    cam.render(make_shared<bvh_node>(world));
+    cam.render(make_shared<bvh_node>(world), make_shared<hittable_list>());
 }
 
 void simple_light() {
@@ -227,7 +227,7 @@ void simple_light() {
 
     cam.max_threads = 6;
 
-    cam.render(make_shared<bvh_node>(world));
+    cam.render(make_shared<bvh_node>(world), make_shared<hittable_list>());
 }
 
 void cornell_box() {
@@ -255,6 +255,11 @@ void cornell_box() {
     box2 = make_shared<translate>(box2, vec3(130,0,65));
     world.add(box2);
 
+    // Light Sources
+    auto empty_material = shared_ptr<material>();
+    auto lights = make_shared<quad>(point3(343,554,332), vec3(-130,0,0), vec3(0,0,-105),
+                                    empty_material);
+
     camera cam;
 
     cam.aspect_ratio      = 1.0;
@@ -271,7 +276,7 @@ void cornell_box() {
 
     cam.max_threads = 6;
 
-    cam.render(make_shared<bvh_node>(world));
+    cam.render(make_shared<bvh_node>(world), lights);
 }
 
 void cornell_smoke() {
@@ -316,7 +321,7 @@ void cornell_smoke() {
 
     cam.max_threads = 6;
 
-    cam.render(make_shared<bvh_node>(world));
+    cam.render(make_shared<bvh_node>(world), make_shared<hittable_list>());
 }
 
 void final_scene(int image_width, int samples_per_pixel, int max_depth) {
@@ -396,7 +401,7 @@ void final_scene(int image_width, int samples_per_pixel, int max_depth) {
 
     cam.max_threads = 6;
 
-    cam.render(make_shared<bvh_node>(world));
+    cam.render(make_shared<bvh_node>(world), make_shared<hittable_list>());
 }
 
 int main() {

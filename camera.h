@@ -4,9 +4,9 @@
 #include <thread>
 #include <vector>
 #include "hittable.h"
-#include "rtweekend.h"
-#include "external/stb_image_write.h"
+#include "pdf.h"
 #include "material.h"
+#include "external/stb_image_write.h"
 
 class camera {
   public:
@@ -27,7 +27,7 @@ class camera {
 
     int max_threads = 8; // Maximum number of rendering threads
 
-    void render(shared_ptr<const hittable> world) {
+    void render(shared_ptr<const hittable> world, shared_ptr<const hittable> lights) {
         initialize();
 
         uint32_t* image_data = new uint32_t[image_width * image_height];
@@ -46,14 +46,14 @@ class camera {
             auto start_line = i * scanlines_per_thread;
             threads.push_back(std::thread(
                 &camera::render_portion, this,
-                    world, scanlines_per_thread, start_line, image_data
+                    world, lights, scanlines_per_thread, start_line, image_data
             ));
         }
         auto final_thread_start_line = (thread_count - 1) * scanlines_per_thread;
         auto final_thread_line_count = scanlines_per_thread + scanline_remainder;
         threads.push_back(std::thread(
             &camera::render_portion, this,
-                world, final_thread_line_count, final_thread_start_line, image_data
+                world, lights, final_thread_line_count, final_thread_start_line, image_data
             ));
 
         threads.push_back(std::thread(&camera::print_progress, this));
@@ -124,15 +124,15 @@ class camera {
         defocus_disk_v = v * defocus_radius;
     }
 
-    void render_portion(shared_ptr<const hittable> world, int line_count,
-                        int start_line, uint32_t* image_data) {
+    void render_portion(shared_ptr<const hittable> world, shared_ptr<const hittable> lights,
+                        int line_count, int start_line, uint32_t* image_data) {
         for (int j = start_line; j < start_line + line_count; j++) {
             for (int i = 0; i < image_width; i++) {
                 color pixel_color(0,0,0);
                 for (int s_j = 0; s_j < sqrt_spp; s_j++) {
                     for (int s_i = 0; s_i < sqrt_spp; s_i++) {
                         ray r = get_ray(i, j, s_i, s_j);
-                        pixel_color += ray_color(r, max_depth, world);
+                        pixel_color += ray_color(r, max_depth, world, lights);
                     }
                 }
                 image_data[j*image_width+i] = get_color(pixel_samples_scale * pixel_color);
@@ -179,7 +179,8 @@ class camera {
         return center + (p[0] * defocus_disk_u) + (p[1] * defocus_disk_v);
     }
 
-    color ray_color(const ray& r, int depth, shared_ptr<const hittable> world) const {
+    color ray_color(const ray& r, int depth, shared_ptr<const hittable> world,
+                    shared_ptr<const hittable> lights) const {
         // If we've exceeded the ray bounce limit, no more light is gathered.
         if (depth <= 0)
             return color(0,0,0);
@@ -201,26 +202,17 @@ class camera {
         if (!rec.mat->scatter(r, rec, attenuation, scattered, pdf_value))
             return color_from_emission;
 
-        auto on_light = point3(random_double(213,343), 554, random_double(227,332));
-        auto to_light = on_light - rec.p;
-        auto distance_squared = to_light.length_squared();
-        to_light = unit_vector(to_light);
+        auto p0 = make_shared<hittable_pdf>(lights, rec.p);
+        auto p1 = make_shared<cosine_pdf>(rec.normal);
+        mixture_pdf mixed_pdf(p0, p1);
 
-        if (dot(to_light, rec.normal) < 0)
-            return color_from_emission;
-
-        double light_area = (343-213)*(332-227);
-        auto light_cosine = std::fabs(to_light.y());
-        if (light_cosine < 0.000001)
-            return color_from_emission;
-
-        pdf_value = distance_squared / (light_cosine * light_area);
-        scattered = ray(rec.p, to_light, r.time());
+        scattered = ray(rec.p, mixed_pdf.generate(), r.time());
+        pdf_value = mixed_pdf.value(scattered.direction());
 
         double scattering_pdf = rec.mat->scattering_pdf(r, rec, scattered);
 
-        color color_from_scatter =
-            (attenuation * scattering_pdf * ray_color(scattered, depth-1, world)) / pdf_value;
+        color sample_color = ray_color(scattered, depth-1, world, lights);
+        color color_from_scatter = (attenuation * scattering_pdf * sample_color) / pdf_value;
 
         return color_from_emission + color_from_scatter;
 
