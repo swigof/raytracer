@@ -19,6 +19,15 @@ uint32_t get_color(const color& pixel_color) {
     auto g = pixel_color.y();
     auto b = pixel_color.z();
 
+    // Replace NaN components with zero.
+    if (std::isnan(r))
+        r = 0.0;
+    if (std::isnan(g))
+        g = 0.0;
+    if (std::isnan(b))
+        b = 0.0;
+
+
     // Apply a linear to gamma transform for gamma 2
     r = linear_to_gamma(r);
     g = linear_to_gamma(g);
