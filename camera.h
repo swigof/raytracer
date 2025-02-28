@@ -1,6 +1,7 @@
 #ifndef CAMERA_H
 #define CAMERA_H
 
+#include <future>
 #include <thread>
 #include <vector>
 #include "hittable.h"
@@ -32,39 +33,16 @@ class camera {
 
         uint32_t* image_data = new uint32_t[image_width * image_height];
 
-        int thread_count = static_cast<int>(std::thread::hardware_concurrency());
-        thread_count = thread_count < 1 ? 1 : thread_count;
-        thread_count = thread_count > max_threads ? max_threads : thread_count;
-
         std::clog << "Processing image with " << thread_count << " threads\n";
-
-        // Process a number of scanlines with each thread
-        const auto scanlines_per_thread = image_height / thread_count;
-        const auto scanline_remainder = image_height % thread_count;
-        std::vector<std::thread> threads;
-        for (int i = 0; i < thread_count - 1; i++) {
-            auto start_line = i * scanlines_per_thread;
-            threads.push_back(std::thread(
-                &camera::render_portion, this,
-                    world, lights, scanlines_per_thread, start_line, image_data
-            ));
-        }
-        auto final_thread_start_line = (thread_count - 1) * scanlines_per_thread;
-        auto final_thread_line_count = scanlines_per_thread + scanline_remainder;
-        threads.push_back(std::thread(
-            &camera::render_portion, this,
-                world, lights, final_thread_line_count, final_thread_start_line, image_data
-            ));
-
-        threads.push_back(std::thread(&camera::print_progress, this));
-
-        for (auto& thread : threads) thread.join();
+        auto print_thread = std::thread(&camera::print_progress, this);
+        render_portion(world, lights, image_height, 0, image_data);
+        print_thread.join();
 
         std::clog << "\nWriting file...\n";
         stbi_write_png("image.png", image_width, image_height, 4, image_data, image_width*4);
         delete [] image_data;
 
-        std::clog << "Done\n";
+        std::clog << "\nDone\n";
     }
 
   private:
@@ -80,6 +58,7 @@ class camera {
     vec3   defocus_disk_u;       // Defocus disk horizontal radius
     vec3   defocus_disk_v;       // Defocus disk vertical radius
     std::atomic_int lines_done;  // Count of lines which have finished rendering
+    int thread_count;            // Number of threads to use for rendering
 
     void initialize() {
         image_height = int(image_width / aspect_ratio);
@@ -122,23 +101,56 @@ class camera {
         auto defocus_radius = focus_dist * std::tan(degrees_to_radians(defocus_angle / 2));
         defocus_disk_u = u * defocus_radius;
         defocus_disk_v = v * defocus_radius;
+
+        // Calculate threads to use for rendering
+        int hw_thread_count = static_cast<int>(std::thread::hardware_concurrency());
+        thread_count = hw_thread_count < 1 ? 1 : hw_thread_count;
+        thread_count = thread_count > max_threads ? max_threads : thread_count;
+        thread_count  = thread_count > sqrt_spp ? sqrt_spp : thread_count;
     }
 
     void render_portion(shared_ptr<const hittable> world, shared_ptr<const hittable> lights,
                         int line_count, int start_line, uint32_t* image_data) {
+        int stratified_rows_per_thread = sqrt_spp / thread_count;
+        int stratified_rows_remainder = sqrt_spp % thread_count;
+
         for (int j = start_line; j < start_line + line_count; j++) {
             for (int i = 0; i < image_width; i++) {
-                color pixel_color(0,0,0);
-                for (int s_j = 0; s_j < sqrt_spp; s_j++) {
-                    for (int s_i = 0; s_i < sqrt_spp; s_i++) {
-                        ray r = get_ray(i, j, s_i, s_j);
-                        pixel_color += ray_color(r, max_depth, world, lights);
-                    }
+                color pixel_color;
+                std::vector<std::future<color>> color_futures;
+                for (int i = 0; i < thread_count - 1; i++) {
+                    auto s_jstart = i * stratified_rows_per_thread;
+                    color_futures.push_back(std::async(
+                        &camera::sample_pixel, this,
+                            world, lights, i, j, s_jstart, stratified_rows_per_thread
+                    ));
                 }
+                auto final_thread_s_jstart = (thread_count - 1) * stratified_rows_per_thread;
+                auto final_thread_row_count = stratified_rows_per_thread +
+                                              stratified_rows_remainder;
+                color_futures.push_back(std::async(
+                    &camera::sample_pixel, this,
+                        world, lights, i, j, final_thread_s_jstart, final_thread_row_count
+                    ));
+
+                for (auto& color_future : color_futures) pixel_color += color_future.get();
+
                 image_data[j*image_width+i] = get_color(pixel_samples_scale * pixel_color);
             }
             lines_done.fetch_add(1);
         }
+    }
+
+    color sample_pixel(shared_ptr<const hittable> world, shared_ptr<const hittable> lights,
+                       int i, int j, int s_jstart, int s_jcount) const {
+        color c;
+        for (int s_j = s_jstart; s_j < s_jstart + s_jcount; s_j++) {
+            for (int s_i = 0; s_i < sqrt_spp; s_i++) {
+                ray r = get_ray(i, j, s_i, s_j);
+                c += ray_color(r, max_depth, world, lights);
+            }
+        }
+        return c;
     }
 
     ray get_ray(int i, int j, int s_i, int s_j) const {
