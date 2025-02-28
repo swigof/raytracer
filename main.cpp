@@ -407,6 +407,7 @@ void final_scene(int image_width, int samples_per_pixel, int max_depth) {
 }
 
 int main() {
+    auto t1 = std::chrono::high_resolution_clock::now();
     switch (7) {
         case 1:  bouncing_spheres();          break;
         case 2:  checkered_spheres();         break;
@@ -419,4 +420,6 @@ int main() {
         case 9:  final_scene(800, 10000, 40); break;
         default: final_scene(400,   250,  4); break;
     }
+    auto t2 = std::chrono::high_resolution_clock::now();
+    std::cout << std::chrono::duration_cast<std::chrono::seconds>(t2-t1).count() << "s";
 }
