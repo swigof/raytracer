@@ -44,3 +44,15 @@ This doesn't seem to work at all and produces an interesting painterly sort of e
 render, as seen below.
 
 ![shared](images/shared.png "shared")
+
+#### Some Sample Times
+
+For a 200x200 render on 6 threads
+
+|               | 5000 samples | 1000 samples | 64 samples |
+|---------------|--------------|--------------|------------|
+| **scanlines** | 953s         | 186s         | 13s        |
+| **futures**   | 635s         | 115s         | 20s        |
+| **shared**    | 673s         | 137s         | 28s        |
+
+Single thread 1000 sample time of 529s
