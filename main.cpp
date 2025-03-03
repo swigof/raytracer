@@ -469,13 +469,13 @@ int main() {
     camera cam;
 
     cam.aspect_ratio      = 0.7;
-    cam.image_width       = 1000;
+    cam.image_width       = 4200;
     cam.samples_per_pixel = 64;
     cam.max_depth         = 50;
 
     cam.vfov     = 80;
     cam.lookfrom = point3(0,3,7);
-    cam.lookat   = point3(-1,2,0);
+    cam.lookat   = point3(-1.5,2,0);
     cam.vup      = vec3(0,1,0);
 
     cam.background_bottom = color(1, 1, 1);

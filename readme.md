@@ -39,11 +39,14 @@ accumulators rather than always summing a single color value per sample.
 #### Shared Accumulator
 
 On the `multithread-sampling-shared` branch is an implementation using a shared color 
-accumulator and mutex lock. 
+accumulator and mutex lock.
 This doesn't seem to work at all and produces an interesting painterly sort of effect in the 
 render, as seen below.
 
 ![shared](images/shared.png "shared")
+
+Similar results were observed using atomics and using a shared sample array with indexing per 
+sample taken.
 
 #### Some Sample Times
 
