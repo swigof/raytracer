@@ -408,18 +408,85 @@ void final_scene(int image_width, int samples_per_pixel, int max_depth) {
 
 int main() {
     auto t1 = std::chrono::high_resolution_clock::now();
-    switch (7) {
-        case 1:  bouncing_spheres();          break;
-        case 2:  checkered_spheres();         break;
-        case 3:  earth();                     break;
-        case 4:  perlin_spheres();            break;
-        case 5:  quads();                     break;
-        case 6:  simple_light();              break;
-        case 7:  cornell_box();               break;
-        case 8:  cornell_smoke();             break;
-        case 9:  final_scene(800, 10000, 40); break;
-        default: final_scene(400,   250,  4); break;
-    }
+
+    hittable_list world;
+    auto lights = make_shared<hittable_list>();
+
+    // Grass
+    auto grass = make_shared<image_texture>("grass.jpg");
+    auto grass_quad = make_shared<quad>(
+        point3(-10,0,-10),
+        point3(20,0,0),
+        point3(0,0,20),
+        make_shared<lambertian>(grass)
+    );
+    world.add(grass_quad);
+
+    // Sky
+    auto sky = make_shared<image_texture>("clouds2.jpg");
+    world.add(make_shared<quad>(
+        point3(-250,250,-250),
+        point3(500,0,50),
+        point3(0,-500,0),
+        make_shared<lambertian>(sky))
+    );
+
+    // Walls
+    auto brown = make_shared<lambertian>(color(.7, .5, .3));
+    auto brick = make_shared<lambertian>(make_shared<image_texture>("brick.jpg"));
+    shared_ptr<hittable> wall1 = box(point3(-6.1,0,2), point3(-6.2,5,-4.1), brick);
+    shared_ptr<hittable> wall2 = box(point3(0.2,0,-4), point3(-6.2,5,-4.1), brick);
+    world.add(wall1);
+    world.add(wall2);
+
+    // Table
+    auto dark_brown = make_shared<lambertian>(color(.4, .2, 0));
+    shared_ptr<hittable> leg1 = box(point3(-6, 1.6, -3), point3(-5.9, 0, -2.9), dark_brown);
+    shared_ptr<hittable> leg2 = box(point3(-6, 1.6, -2), point3(-5.9, 0, -2.1), dark_brown);
+    shared_ptr<hittable> leg3 = box(point3(-5, 1.6, -3), point3(-5.1, 0, -2.9), dark_brown);
+    shared_ptr<hittable> leg4 = box(point3(-5, 1.6, -2), point3(-5.1, 0, -2.1), dark_brown);
+    shared_ptr<hittable> top = box(point3(-5, 1.6, -2), point3(-6.0, 1.75, -3), dark_brown);
+    world.add(leg1);
+    world.add(leg2);
+    world.add(leg3);
+    world.add(leg4);
+    world.add(top);
+
+    // Lamp
+    auto white = make_shared<isotropic>(color(1, 1, 1));
+    auto light = make_shared<diffuse_light>(color(1, 1, 1));
+    auto empty_material = shared_ptr<material>();
+    shared_ptr<sphere> lamp = make_shared<sphere>(point3(-5.5,2,-2.5), 0.25, light);
+    shared_ptr<hittable> lamp_base = box(point3(-5.25,1.75,-2.25), point3(-5.75,1.9,-2.75), white);
+    world.add(lamp);
+    world.add(lamp_base);
+    lights->add(make_shared<sphere>(point3(0,999,0), 1, empty_material));
+
+    // ORB
+    auto glass = make_shared<dielectric>(1.5);
+    world.add(make_shared<sphere>(point3(1.5,2,-3), 2, glass));
+
+    camera cam;
+
+    cam.aspect_ratio      = 0.7;
+    cam.image_width       = 1000;
+    cam.samples_per_pixel = 64;
+    cam.max_depth         = 50;
+
+    cam.vfov     = 80;
+    cam.lookfrom = point3(0,3,7);
+    cam.lookat   = point3(-1,2,0);
+    cam.vup      = vec3(0,1,0);
+
+    cam.background_bottom = color(1, 1, 1);
+    cam.background_top    = color(0.5, 0.7, 1.0);
+
+    cam.defocus_angle = 0;
+
+    cam.max_threads = 6;
+
+    cam.render(make_shared<bvh_node>(world), lights);
+
     auto t2 = std::chrono::high_resolution_clock::now();
     std::cout << std::chrono::duration_cast<std::chrono::seconds>(t2-t1).count() << "s";
 }
